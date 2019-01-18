@@ -1,118 +1,99 @@
 {-# LANGUAGE GADTs #-}
+module Fun where
 
-import Control.Exception
-import System.IO.Unsafe
 import Test.QuickCheck hiding ( Fun )
 import Control.Monad( liftM, liftM2 )
+import Bot
 
 --------------------------------------------------------------------------------
 
-data Fun a c where
-  -- bottom
-  Bot   :: Fun a c
+data FunNat c where
+  Case :: c -> FunNat c -> FunNat c
   
-  -- strict pattern matching
-  Unit  :: Fun () c
-  Pair1 :: Fun a (Fun b c) -> Fun (a,b) c
-  Pair2 :: Fun b (Fun a c) -> Fun (a,b) c
-  Case  :: Fun a c -> Fun b c -> Fun (Either a b) c
+  Unit :: FunNat ()
+  Pair :: FunNat a -> FunNat b -> FunNat (a,b)
+  Lft  :: FunNat a -> FunNat (Either a b)
+  Rgt  :: FunNat b -> FunNat (Either a b)
 
-  -- lazy result producing
-  Cons  :: Fun a b -> Fun a c -> Fun a (b,c)
-  Lft   :: Fun a b -> Fun a (Either b c)
-  Rgt   :: Fun a c -> Fun a (Either b c)
-  Lazy  :: c -> Fun a c
+  Map  :: (b -> c) -> FunNat b -> FunNat c
 
-{-
-TODO:
-
-- Add Map constructor so types can change
-
-- Maybe Unit should get a result also?
-
-- Maybe Bot and Lazy should be merged?
--}
+sh :: Show a => FunNat a -> String
+sh f = show [ apply f n | n <- take 5 (iterate S Z) ]
 
 --------------------------------------------------------------------------------
 
-apply :: Fun a c -> (a -> c)
-apply Bot        _         = bot
+data Nat = Z | S Nat
+ deriving ( Eq, Ord, Show )
 
-apply Unit       ()        = bot
-apply (Pair1 p)  (x,y)     = apply (apply p x) y
-apply (Pair2 p)  (x,y)     = apply (apply p y) x
-apply (Case p _) (Left x)  = apply p x
-apply (Case _ q) (Right y) = apply q y
+apply :: FunNat c -> (Nat -> c)
+apply (Case zero succ) Z     = zero
+apply (Case zero succ) (S n) = apply succ n
 
-apply (Cons p q) x         = (apply p x, apply q x)
-apply (Lft p)    x         = Left  (apply p x)
-apply (Rgt q)    x         = Right (apply q x)
+apply Unit             _     = ()
+apply (Pair f g)       n     = (apply f n, apply g n)
+apply (Lft f)          n     = Left (apply f n)
+apply (Rgt g)          n     = Right (apply g n)
 
-apply (Lazy z)   _         = z
+apply (Map h f)        n     = h (apply f n)
 
 --------------------------------------------------------------------------------
 
--- genStrict is for generating a random function that starts with a pattern match
--- on its argument
-class Strict a where
-  genStrict :: Lazy b => Gen (Fun a b)
+class Arbitrary a => FunResult a where
+  genStrict :: Int -> Gen (FunNat a)
+  genStrict k | k <= 0 =
+    do return (Map (\_ -> bot) Unit)
 
--- genLazy is for generating a random function that starts with constructing
--- (part of) its result
-class Lazy b where
-  genLazy :: Strict a => Gen (Fun a b)
+  genStrict k =
+    do z <- arbitrary
+       s <- genFun (k-1)
+       return (Case z s)
+  
+  genLazy :: Int -> Gen (FunNat a)
+  
+  genFun :: Int -> Gen (FunNat a)
+  genFun k =
+    oneof ( [genStrict k | k > 0]
+         ++ [genLazy k]
+          )
 
--- genFun randomly decides between constant bottom, strict or lazy
-genFun :: (Strict a, Lazy b) => Gen (Fun a b)
-genFun = oneof [return Bot, genStrict, genLazy]
+instance FunResult () where
+  genLazy _ = return Unit
 
-instance Strict () where
-  genStrict = return Unit
+instance (FunResult a, FunResult b) => FunResult (a,b) where
+  genLazy k =
+    do f <- genFun (k-1)
+       g <- genFun (k-1)
+       return (Pair f g)
 
-instance (Strict a, Strict b) => Strict (a,b) where
-  genStrict = oneof
-    [ liftM Pair1 genFun
-    , liftM Pair2 genFun
+instance (FunResult a, FunResult b) => FunResult (Either a b) where
+  genLazy k =
+    oneof [liftM Lft (genFun (k-1)), liftM Rgt (genFun (k-1))]
+
+instance FunResult a => FunResult [a] where
+  genLazy k =
+    do f <- genFun k -- :: Gen (Either () (a,[a]))
+       return (Map h f)
+   where
+    h (Left u)       = [] where types = u :: ()
+    h (Right (x,xs)) = x:xs
+
+instance FunResult Nat where
+  genLazy k =
+    do f <- genFun k -- :: Gen (Either () Nat)
+       return (Map h f)
+   where
+    h (Left u)  = Z where types = u :: ()
+    h (Right n) = S n
+
+--------------------------------------------------------------------------------
+
+instance Arbitrary Nat where
+  arbitrary =
+    frequency
+    [ (1, return bot)
+    , (2, return Z)
+    , (5, liftM S arbitrary)
     ]
 
-instance (Strict a, Strict b) => Strict (Either a b) where
-  genStrict = liftM2 Case genFun genFun
-
-instance (Lazy a, Lazy b) => Lazy (a,b) where
-  genLazy = liftM2 Cons genFun genFun
-
-instance (Lazy a, Lazy b) => Lazy (Either a b) where
-  genLazy = oneof
-    [ liftM Lft genFun
-    , liftM Rgt genFun
-    ]
-
-instance (Strict a, Lazy b) => Lazy (Fun a b) where
-  genLazy = liftM Lazy genFun
-
-{-
-TODO:
-
-- add a size parameter so that we can deal with infinite types (e.g. lists)
-
-- think about frequencies
--}
-
 --------------------------------------------------------------------------------
--- please close your eyes if you're under 18
-
-bot :: a
-bot = error "_|_"
-
-isBot :: a -> Bool
-isBot x = unsafePerformIO $
-  do eea <- try (evaluate x)
-     case eea of
-       Left e
-         | otherwise -> return True
-         | take 3 (displayException (e :: ErrorCall)) == "_|_" -> return True
-       _ -> return False
-
---------------------------------------------------------------------------------
-
 
