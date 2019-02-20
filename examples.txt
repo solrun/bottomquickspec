@@ -29,5 +29,15 @@ foldr c n (build g) = g c n -- can we do something with this?
 
 Can we find the right conditions?
 
+Wadler says that, if we have
+
+  r :: [a] -> [a]
+  
+then we know
+
+  r . map f = map f . r
+
+but, if r is defined using the fixpoint combinator, then the above only holds for strict f.
+
 
 
