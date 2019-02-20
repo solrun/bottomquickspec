@@ -1,0 +1,22 @@
+Examples of properties we would like to generate:
+  Parametricity properties
+
+What happens if we define approximation function?
+
+Partial functions
+
+Infinite structures - Finiteness predicate
+
+Fast & loose reasoning example:
+reverse . map (\x -> x - y) = revMap
+is the left inverse of
+mapRev = map (\x -> y + x) . reverse
+this is true in a total setting, turns out to also be true in a partial setting for total finite lists xs and finite naturals n
+(revMap . mapRev) xs [y -> n] = xs 
+-- can we find more general conditions?
+
+Properties that hold in a total language but not in the presence of bottoms, can we find the right conditions?
+reverse . reverse = id
+(\x -> x - y) . (\x -> x + y) = id
+id . f = f
+isTotal f => isBot f @ x = isBot x
