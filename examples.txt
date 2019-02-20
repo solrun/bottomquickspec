@@ -20,3 +20,14 @@ reverse . reverse = id
 (\x -> x - y) . (\x -> x + y) = id
 id . f = f
 isTotal f => isBot f @ x = isBot x
+
+From Johann+Voigtlander (parametricity in the presence of seq):
+
+filter p . map f = map f . filter (p . f) -- for strange stricter versions of filter and map
+
+foldr c n (build g) = g c n -- can we do something with this?
+
+Can we find the right conditions?
+
+
+
