@@ -39,5 +39,5 @@ then we know
 
 but, if r is defined using the fixpoint combinator, then the above only holds for strict f.
 
-
+pretty-printing, parsing & strictify from chasing bottoms paper
 
