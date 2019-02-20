@@ -57,17 +57,28 @@ class Arbitrary a => FunResult a where
           )
 
 instance FunResult () where
-  genLazy _ = return Unit
+  genLazy _ = elements [bot, Unit]
+
+instance FunResult Bool where
+  genLazy k =
+    do f <- genFun k
+       return (Map h f)
+   where
+    h (Left u)  = False where types = u :: ()
+    h (Right u) = True  where types = u :: ()
 
 instance (FunResult a, FunResult b) => FunResult (a,b) where
   genLazy k =
-    do f <- genFun (k-1)
-       g <- genFun (k-1)
-       return (Pair f g)
+    oneof [
+      do f <- genFun (k-1)
+         g <- genFun (k-1)
+         return (Pair f g)
+      , return bot
+      ]
 
 instance (FunResult a, FunResult b) => FunResult (Either a b) where
   genLazy k =
-    oneof [liftM Lft (genFun (k-1)), liftM Rgt (genFun (k-1))]
+    oneof [liftM Lft (genFun (k-1)), liftM Rgt (genFun (k-1)), return bot]
 
 instance FunResult a => FunResult [a] where
   genLazy k =
